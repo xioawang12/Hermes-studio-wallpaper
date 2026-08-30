@@ -1,17 +1,24 @@
 import { randomBytes } from 'crypto'
-import { mkdir, readFile, rename, unlink, writeFile } from 'fs/promises'
+import { link, mkdir, readFile, rename, unlink, writeFile } from 'fs/promises'
 import { basename, join } from 'path'
-import { config } from '../../public/config'
+import {
+  saveUserThemeBackground,
+  type UserThemeRecord,
+} from '../../repositories/user-theme-store'
 import {
   addWallpaperRecord,
   deleteWallpaperRecord,
+  getWallpaperById,
   WallpaperValidationError,
+  setCurrentWallpaper as setLibraryCurrent,
   type UserWallpaperRecord,
 } from '../../repositories/user-wallpaper-store'
 
 export const MAX_WALLPAPER_BYTES = 50 * 1024 * 1024
 
-const WALLPAPER_ASSET_ROOT = join(config.appHome, 'wallpaper-library')
+/** Wallpaper assets live on the data volume, same disk as theme-backgrounds (hardlink-able). */
+const WALLPAPER_ASSET_ROOT = '/data/hermes-data/wallpaper-library'
+const THEME_ASSET_ROOT = '/root/.hermes-web-ui/theme-backgrounds'
 
 const MEDIA_TYPES = {
   jpeg: { mime: 'image/jpeg', extension: '.jpg' },
@@ -141,4 +148,83 @@ export function wallpaperFilePath(userIdValue: unknown, filename: unknown): stri
   const userId = normalizeUserId(userIdValue)
   if (typeof filename !== 'string') throw new WallpaperValidationError('Invalid filename')
   return storedWallpaperPath(userId, filename)
+}
+
+// ---------------------------------------------------------------------------
+// Library → native theme bridge: making a library wallpaper "current" must
+// drive the native single-background mechanism (user_themes) so the existing
+// --app-background-image layer renders it with zero client-side changes.
+// ---------------------------------------------------------------------------
+
+function themeDirectory(userId: number): string {
+  return join(THEME_ASSET_ROOT, String(userId))
+}
+
+function themeStoredPath(userId: number, filename: string): string {
+  if (!/^[a-f0-9]{32}\.(?:jpg|png|webp|gif|mp4|webm|mov)$/.test(filename)) {
+    throw new Error('Invalid stored theme background filename')
+  }
+  return join(themeDirectory(userId), filename)
+}
+
+/**
+ * Mark a library wallpaper as current AND mirror it into the native theme
+ * system: hard-link the file into theme-backgrounds/<userId>/ (same volume,
+ * zero copy) and update user_themes so /api/theme/background serves it.
+ * Returns both the library record and the mirrored theme record.
+ */
+export async function applyWallpaperAsCurrent(
+  userIdValue: unknown,
+  wallpaperId: unknown,
+): Promise<{ wallpaper: UserWallpaperRecord; theme: UserThemeRecord }> {
+  const userId = normalizeUserId(userIdValue)
+  const record = setLibraryCurrent(userId, wallpaperId)
+
+  const source = storedWallpaperPath(userId, record.filename)
+  const target = themeStoredPath(userId, record.filename)
+  await mkdir(themeDirectory(userId), { recursive: true })
+
+  // Replace any previous hard-link at the target (idempotent).
+  await unlink(target).catch(() => undefined)
+  try {
+    await link(source, target)
+  } catch {
+    // Cross-device fallback: full copy (should not happen — both roots on /data).
+    await writeFile(target, await readFile(source), { mode: 0o600 })
+  }
+
+  const theme = saveUserThemeBackground(userId, {
+    filename: record.filename,
+    originalName: record.originalName,
+    mime: record.mime,
+  })
+  return { wallpaper: record, theme }
+}
+
+/** Delete must also clean the mirrored hard-link in theme-backgrounds. */
+export async function deleteWallpaperEverywhere(
+  userIdValue: unknown,
+  wallpaperId: unknown,
+): Promise<UserWallpaperRecord> {
+  const userId = normalizeUserId(userIdValue)
+  const record = deleteWallpaperRecord(userId, wallpaperId)
+  await unlink(themeStoredPath(userId, record.filename)).catch(() => undefined)
+  await removeWallpaperFile(userId, record.filename)
+  return record
+}
+
+export async function readLibraryWallpaperFile(
+  userIdValue: unknown,
+  filename: unknown,
+): Promise<{ data: Buffer; mime: string } | null> {
+  const userId = normalizeUserId(userIdValue)
+  if (typeof filename !== 'string') return null
+  try {
+    return {
+      data: await readFile(storedWallpaperPath(userId, filename)),
+      mime: 'application/octet-stream',
+    }
+  } catch {
+    return null
+  }
 }

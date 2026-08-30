@@ -2,7 +2,6 @@ import type { Context } from 'koa'
 import {
   listUserWallpapers,
   getWallpaperById,
-  setCurrentWallpaper,
   updateWallpaperFillMode,
   deleteWallpaperRecord,
   getUserCarousel,
@@ -10,9 +9,11 @@ import {
   WallpaperValidationError,
 } from '../repositories/user-wallpaper-store'
 import {
+  applyWallpaperAsCurrent,
   saveWallpaperFile,
   removeWallpaperFile,
   wallpaperFilePath,
+  readLibraryWallpaperFile,
   MAX_WALLPAPER_BYTES,
 } from '../services/theme/user-wallpaper'
 import {
@@ -34,27 +35,16 @@ function unauthorized(ctx: Context): void {
   ctx.body = { error: 'Unauthorized' }
 }
 
-interface ValidationFailure {
-  status: number
-  message: string
-}
-
-function asValidationFailure(error: unknown): ValidationFailure | null {
+function fail(ctx: Context, error: unknown): void {
   if (error instanceof WallpaperValidationError) {
     const withStatus = error as unknown as { status?: number }
-    return { status: withStatus.status ?? 400, message: error.message }
+    ctx.status = withStatus.status ?? 400
+    ctx.body = { error: error.message }
+    return
   }
   if (error instanceof MultipartParseError) {
-    return { status: 400, message: error.message }
-  }
-  return null
-}
-
-function fail(ctx: Context, error: unknown): void {
-  const failure = asValidationFailure(error)
-  if (failure) {
-    ctx.status = failure.status
-    ctx.body = { error: failure.message }
+    ctx.status = 400
+    ctx.body = { error: error.message }
     return
   }
   throw error
@@ -145,6 +135,18 @@ export async function uploadWallpaper(ctx: Context) {
   ctx.body = { error: 'Missing wallpaper file' }
 }
 
+export async function setCurrent(ctx: Context) {
+  const id = userId(ctx)
+  if (!id) return unauthorized(ctx)
+  try {
+    const wallpaperId = Number(ctx.params.wallpaperId)
+    const { wallpaper } = await applyWallpaperAsCurrent(id, wallpaperId)
+    ctx.body = toPayload(wallpaper)
+  } catch (error) {
+    fail(ctx, error)
+  }
+}
+
 export async function getWallpaperFile(ctx: Context) {
   const id = userId(ctx)
   if (!id) return unauthorized(ctx)
@@ -172,13 +174,28 @@ export async function getWallpaperFile(ctx: Context) {
   }
 }
 
-export async function setCurrent(ctx: Context) {
+export async function serveCurrentWallpaperFile(ctx: Context) {
   const id = userId(ctx)
   if (!id) return unauthorized(ctx)
   try {
-    const wallpaperId = Number(ctx.params.wallpaperId)
-    const record = setCurrentWallpaper(id, wallpaperId)
-    ctx.body = toPayload(record)
+    const wallpapers = listUserWallpapers(id)
+    const current = wallpapers.find(w => w.isCurrent)
+    if (!current) {
+      ctx.status = 404
+      ctx.body = { error: 'No current wallpaper' }
+      return
+    }
+    const filePath = wallpaperFilePath(id, current.filename)
+    if (!existsSync(filePath)) {
+      ctx.status = 404
+      ctx.body = { error: 'Wallpaper file missing' }
+      return
+    }
+    ctx.type = current.mime
+    ctx.set('Cache-Control', 'private, max-age=60')
+    ctx.set('ETag', `"wallpaper-current-${current.id}-${current.createdAt}"`)
+    ctx.length = statSync(filePath).size
+    ctx.body = createReadStream(filePath)
   } catch (error) {
     fail(ctx, error)
   }
@@ -202,8 +219,17 @@ export async function deleteWallpaper(ctx: Context) {
   if (!id) return unauthorized(ctx)
   try {
     const wallpaperId = Number(ctx.params.wallpaperId)
-    const record = deleteWallpaperRecord(id, wallpaperId)
-    await removeWallpaperFile(id, record.filename)
+    // Full cleanup: library row + library file + mirrored hard-link in theme-backgrounds.
+    // If the deleted one was current, fall back to another wallpaper or clear the theme.
+    const wasCurrent = getWallpaperById(id, wallpaperId)?.isCurrent === true
+    const remaining = listUserWallpapers(id).filter(w => w.id !== wallpaperId)
+    await import('../services/theme/user-wallpaper').then(m => m.deleteWallpaperEverywhere(id, wallpaperId))
+    if (wasCurrent && remaining.length > 0) {
+      await import('../services/theme/user-wallpaper').then(m => m.applyWallpaperAsCurrent(id, remaining[0].id))
+    } else if (wasCurrent) {
+      ctx.body = { ok: true, cleared: true }
+      return
+    }
     ctx.body = { ok: true }
   } catch (error) {
     fail(ctx, error)
@@ -226,3 +252,6 @@ export async function updateCarousel(ctx: Context) {
     fail(ctx, error)
   }
 }
+
+// re-export for delete handler's dynamic import typing
+export { readLibraryWallpaperFile }

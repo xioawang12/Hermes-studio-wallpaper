@@ -5,6 +5,7 @@ export const wallpaperRoutes = new Router()
 
 wallpaperRoutes.get('/api/theme/wallpapers', wallpaperCtrl.listWallpapers)
 wallpaperRoutes.post('/api/theme/wallpapers', wallpaperCtrl.uploadWallpaper)
+wallpaperRoutes.get('/api/theme/wallpapers/current/file', wallpaperCtrl.serveCurrentWallpaperFile)
 wallpaperRoutes.get('/api/theme/wallpapers/:wallpaperId/file', wallpaperCtrl.getWallpaperFile)
 wallpaperRoutes.put('/api/theme/wallpapers/:wallpaperId/current', wallpaperCtrl.setCurrent)
 wallpaperRoutes.put('/api/theme/wallpapers/:wallpaperId/fill', wallpaperCtrl.updateFillMode)
