@@ -1,3 +1,5 @@
+import { USER_WALLPAPERS_TABLE, USER_WALLPAPERS_SCHEMA, USER_WALLPAPERS_INDEXES, USER_CAROUSEL_TABLE, USER_CAROUSEL_SCHEMA } from "./wallpaper-schemas"
+
 /**
  * Centralized schema definitions for all Hermes SQLite tables.
  * All table schemas are defined here for unified management and migration.
@@ -1561,6 +1563,12 @@ export function initAllHermesTables(): void {
       indexes: USER_PROFILES_INDEXES,
     })
     syncTable(USER_THEMES_TABLE, USER_THEMES_SCHEMA)
+
+    // Wallpaper library (multi-wallpaper + carousel)
+    syncTable(USER_WALLPAPERS_TABLE, USER_WALLPAPERS_SCHEMA, {
+      indexes: USER_WALLPAPERS_INDEXES,
+    })
+    syncTable(USER_CAROUSEL_TABLE, USER_CAROUSEL_SCHEMA)
 
     // User-scoped Social Messages accounts. Only one account per user may be active.
     syncTable(SOCIAL_MESSAGE_ACCOUNTS_TABLE, SOCIAL_MESSAGE_ACCOUNTS_SCHEMA, {
