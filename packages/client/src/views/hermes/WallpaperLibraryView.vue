@@ -8,6 +8,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { NButton, NInputNumber, NSelect, NSwitch, useMessage } from 'naive-ui'
 import { request, getApiKey } from '@/api/client'
+import { useTheme } from '@/composables/useTheme'
 
 interface WallpaperItem {
   id: number
@@ -35,6 +36,7 @@ interface CarouselSettings {
 }
 
 const message = useMessage()
+const { refreshBackground, hasBackgroundImage } = useTheme()
 
 const wallpapers = ref<WallpaperItem[]>([])
 const busy = ref(false)
@@ -112,6 +114,8 @@ async function setCurrent(item: WallpaperItem) {
   try {
     await request(`/api/theme/wallpapers/${item.id}/current`, { method: 'PUT' })
     await loadLibrary()
+    // native theme system re-fetches /api/theme/background (updatedAt bumped by server)
+    await refreshBackground(true)
     message.success('已设为当前壁纸')
   } catch {
     message.error('设置失败')
@@ -141,6 +145,7 @@ async function deleteWallpaper(item: WallpaperItem) {
     await saveCarousel()
     message.success('已删除')
     await loadLibrary()
+    await refreshBackground(true)
   } catch {
     message.error('删除失败')
   } finally {
@@ -221,15 +226,27 @@ function applyBackground(): void {
 const TUNING_STYLE_ID = 'hermes-wallpaper-tuning'
 
 function applyTuning(): void {
+  const c = carousel.value
   let style = document.getElementById(TUNING_STYLE_ID)
   if (style) style.remove()
-  const c = carousel.value
   style = document.createElement('style')
   style.id = TUNING_STYLE_ID
+  // Tune the NATIVE glass system (App.vue .app-shell--custom-background) by
+  // overriding its hardcoded 0.72 alpha / 8px blur with our slider values.
   style.textContent = `
-#app .app-shell { backdrop-filter: blur(${c.mainBlur}px); -webkit-backdrop-filter: blur(${c.mainBlur}px); }
-#app .app-shell > * { background-color: rgba(15, 17, 21, ${c.mainOpacity}) !important; }
-#app .sidebar, #app aside { background-color: rgba(15, 17, 21, ${c.sidebarOpacity}) !important; backdrop-filter: blur(${c.sidebarBlur}px) !important; }
+html.theme-has-custom-background .app-main--card {
+  background-color: rgba(var(--bg-main-surface-rgb), ${c.mainOpacity}) !important;
+  -webkit-backdrop-filter: blur(${c.mainBlur}px) saturate(110%) !important;
+  backdrop-filter: blur(${c.mainBlur}px) saturate(110%) !important;
+}
+html.theme-has-custom-background :deep(.sidebar),
+html.theme-has-custom-background .sidebar,
+html.theme-has-custom-background .hermes-config-sidebar {
+  background-color: rgba(var(--bg-sidebar-surface-rgb), ${c.sidebarOpacity}) !important;
+  -webkit-backdrop-filter: blur(${c.sidebarBlur}px) saturate(110%) !important;
+  backdrop-filter: blur(${c.sidebarBlur}px) saturate(110%) !important;
+}
+#hermes-wallpaper-scrim { position:fixed;inset:0;z-index:-1;pointer-events:none;background:rgba(0,0,0,${c.scrimStrength}); }
 `
   document.head.appendChild(style)
   let scrim = document.getElementById('hermes-wallpaper-scrim')
@@ -275,7 +292,7 @@ onMounted(() => {
     <header class="page-header">
       <div>
         <h2 class="header-title">壁纸库</h2>
-        <p class="header-hint">上传图片/视频，支持轮播与玻璃调校</p>
+        <p class="header-hint">上传图片/视频（支持轮播与调校）。⚠ iPhone 实况图请导出 <b>.mov</b> 视频文件上传——「储存为图片」只有静态 JPG 不会有动态效果</p>
       </div>
       <div class="header-actions">
         <input

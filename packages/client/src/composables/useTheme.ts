@@ -320,6 +320,7 @@ export function useTheme() {
     activateUserTheme,
     uploadBackground,
     removeBackground,
+    refreshBackground: (refresh = true) => loadBackground(refresh),
     normalizeThemeFontSize,
     normalizeHexColor,
   }
