@@ -273,7 +273,7 @@ async function handleReset() {
               ref="fileInput"
               class="file-input"
               type="file"
-              accept="image/png,image/jpeg,image/webp,image/gif"
+              accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm,video/quicktime"
               @change="handleBackgroundFile"
             />
             <NButton size="small" :loading="backgroundBusy" @click="openBackgroundPicker">

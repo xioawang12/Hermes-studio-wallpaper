@@ -2246,7 +2246,7 @@ export default {
     background: '背景图片',
     backgroundHint: '上传个人工作区背景',
     backgroundTypeError: '请使用 PNG、JPEG、WebP 或 GIF 图片',
-    backgroundSizeError: '背景图片不能超过 10 MB',
+    backgroundSizeError: '背景文件不能超过 50 MB',
     backgroundUploaded: '背景图片已更新',
     backgroundUploadFailed: '背景图片上传失败',
     backgroundRemoved: '背景图片已移除',

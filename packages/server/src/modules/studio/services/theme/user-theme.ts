@@ -19,7 +19,7 @@ export {
   UserThemeValidationError,
 }
 
-export const MAX_THEME_BACKGROUND_BYTES = 10 * 1024 * 1024
+export const MAX_THEME_BACKGROUND_BYTES = 50 * 1024 * 1024
 
 const THEME_ASSET_ROOT = join(config.appHome, 'theme-backgrounds')
 
@@ -28,6 +28,9 @@ const IMAGE_TYPES = {
   png: { mime: 'image/png', extension: '.png' },
   webp: { mime: 'image/webp', extension: '.webp' },
   gif: { mime: 'image/gif', extension: '.gif' },
+  mp4: { mime: 'video/mp4', extension: '.mp4' },
+  webm: { mime: 'video/webm', extension: '.webm' },
+  mov: { mime: 'video/quicktime', extension: '.mov' },
 } as const
 
 export class ThemeBackgroundValidationError extends Error {
@@ -67,6 +70,14 @@ function detectImageType(data: Buffer): typeof IMAGE_TYPES[keyof typeof IMAGE_TY
   ) {
     return IMAGE_TYPES.gif
   }
+  if (data.length >= 12 && data.subarray(4, 8).toString('ascii') === 'ftyp') {
+    const brand = data.subarray(8, 12).toString('ascii')
+    if (brand.startsWith('qt')) return IMAGE_TYPES.mov
+    if (['isom', 'iso5', 'iso6', 'mp42', 'mp41', 'avc1', 'M4V '].includes(brand)) return IMAGE_TYPES.mp4
+  }
+  if (data.length >= 4 && data[0] === 0x1a && data[1] === 0x45 && data[2] === 0xdf && data[3] === 0xa3) {
+    return IMAGE_TYPES.webm
+  }
   return null
 }
 
@@ -75,7 +86,7 @@ function userThemeDirectory(userId: number): string {
 }
 
 function storedBackgroundPath(userId: number, filename: string): string {
-  if (!/^[a-f0-9]{32}\.(?:jpg|png|webp|gif)$/.test(filename)) {
+  if (!/^[a-f0-9]{32}\.(?:jpg|png|webp|gif|mp4|webm|mov)$/.test(filename)) {
     throw new Error('Invalid stored theme background filename')
   }
   return join(userThemeDirectory(userId), filename)
@@ -94,11 +105,11 @@ export async function replaceThemeBackground(
   const userId = normalizeUserId(userIdValue)
   if (!data.length) throw new ThemeBackgroundValidationError('Background image is empty')
   if (data.length > MAX_THEME_BACKGROUND_BYTES) {
-    throw new ThemeBackgroundValidationError('Background image exceeds the 10 MB limit', 413)
+    throw new ThemeBackgroundValidationError('Background image exceeds the 50 MB limit', 413)
   }
   const imageType = detectImageType(data)
   if (!imageType) {
-    throw new ThemeBackgroundValidationError('Use a PNG, JPEG, WebP, or GIF image', 415)
+    throw new ThemeBackgroundValidationError('Use a PNG, JPEG, WebP, GIF, MP4, WebM, or MOV file', 415)
   }
 
   const current = getUserTheme(userId)
