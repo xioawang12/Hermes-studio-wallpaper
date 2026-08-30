@@ -7,6 +7,7 @@
  */
 import { computed, onMounted, ref } from 'vue'
 import { NButton, NInputNumber, NSelect, NSwitch, useMessage } from 'naive-ui'
+import { request, getApiKey } from '@/api/client'
 
 interface WallpaperItem {
   id: number
@@ -65,17 +66,17 @@ const orderOptions = [
 const current = computed(() => wallpapers.value.find(w => w.isCurrent) ?? null)
 const carouselIds = computed(() => new Set(carousel.value.wallpaperIds))
 
-function authHeaders(): Record<string, string> {
-  const token = localStorage.getItem('hermes-token') || localStorage.getItem('token') || ''
-  return token ? { Authorization: `Bearer ${token}` } : {}
+/** Fetch binary wallpaper file via raw fetch (request() parses JSON) with auth header. */
+async function fetchWallpaperBlob(url: string): Promise<Blob> {
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${getApiKey()}` } })
+  if (!res.ok) throw new Error(String(res.status))
+  return res.blob()
 }
 
 async function loadLibrary() {
   busy.value = true
   try {
-    const res = await fetch('/api/theme/wallpapers', { headers: authHeaders() })
-    if (!res.ok) throw new Error(String(res.status))
-    const data = await res.json()
+    const data = await request<{ wallpapers: WallpaperItem[]; carousel: Partial<CarouselSettings> }>('/api/theme/wallpapers')
     wallpapers.value = data.wallpapers ?? []
     if (data.carousel) carousel.value = { ...carousel.value, ...data.carousel }
     applyBackground()
@@ -95,15 +96,11 @@ async function uploadWallpaper(event: Event) {
   try {
     const form = new FormData()
     form.append('wallpaper', file)
-    const res = await fetch('/api/theme/wallpapers', { method: 'POST', body: form, headers: authHeaders() })
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}))
-      throw new Error(err.error || String(res.status))
-    }
+    await request('/api/theme/wallpapers', { method: 'POST', body: form })
     message.success('壁纸已上传')
     await loadLibrary()
   } catch (error) {
-    message.error(`上传失败：${error instanceof Error ? error.message : '未知错误'}`)
+    message.error(`上传失败：${error instanceof Error && error.message !== 'Unauthorized' ? error.message : '未授权或未知错误'}`)
   } finally {
     busy.value = false
     input.value = ''
@@ -113,8 +110,7 @@ async function uploadWallpaper(event: Event) {
 async function setCurrent(item: WallpaperItem) {
   busy.value = true
   try {
-    const res = await fetch(`/api/theme/wallpapers/${item.id}/current`, { method: 'PUT', headers: authHeaders() })
-    if (!res.ok) throw new Error(String(res.status))
+    await request(`/api/theme/wallpapers/${item.id}/current`, { method: 'PUT' })
     await loadLibrary()
     message.success('已设为当前壁纸')
   } catch {
@@ -126,9 +122,8 @@ async function setCurrent(item: WallpaperItem) {
 
 async function setFillMode(item: WallpaperItem, mode: string) {
   try {
-    await fetch(`/api/theme/wallpapers/${item.id}/fill`, {
+    await request(`/api/theme/wallpapers/${item.id}/fill`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body: JSON.stringify({ fillMode: mode }),
     })
     item.fillMode = mode as WallpaperItem['fillMode']
@@ -141,8 +136,7 @@ async function setFillMode(item: WallpaperItem, mode: string) {
 async function deleteWallpaper(item: WallpaperItem) {
   busy.value = true
   try {
-    const res = await fetch(`/api/theme/wallpapers/${item.id}`, { method: 'DELETE', headers: authHeaders() })
-    if (!res.ok) throw new Error(String(res.status))
+    await request(`/api/theme/wallpapers/${item.id}`, { method: 'DELETE' })
     carousel.value.wallpaperIds = carousel.value.wallpaperIds.filter(id => id !== item.id)
     await saveCarousel()
     message.success('已删除')
@@ -157,12 +151,11 @@ async function deleteWallpaper(item: WallpaperItem) {
 // ---- Carousel settings persistence ----
 async function saveCarousel() {
   try {
-    const res = await fetch('/api/theme/carousel', {
+    const saved = await request<CarouselSettings>('/api/theme/carousel', {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body: JSON.stringify(carousel.value),
     })
-    if (res.ok) carousel.value = { ...carousel.value, ...(await res.json()) }
+    carousel.value = { ...carousel.value, ...saved }
   } catch {
     message.error('保存轮播设置失败')
   }
@@ -196,8 +189,7 @@ function applyBackground(): void {
   revokeBackground()
   const item = current.value
   if (!item) return
-  fetch(item.url, { headers: authHeaders() })
-    .then(res => (res.ok ? res.blob() : Promise.reject(new Error(String(res.status)))))
+  fetchWallpaperBlob(item.url)
     .then((blob) => {
       const objectUrl = URL.createObjectURL(blob)
       backgroundObjectUrl = objectUrl
