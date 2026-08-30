@@ -36,7 +36,7 @@ interface CarouselSettings {
 }
 
 const message = useMessage()
-const { refreshBackground, hasBackgroundImage } = useTheme()
+const { refreshBackground } = useTheme()
 
 const wallpapers = ref<WallpaperItem[]>([])
 const busy = ref(false)
