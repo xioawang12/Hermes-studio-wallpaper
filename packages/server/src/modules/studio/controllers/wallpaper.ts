@@ -132,7 +132,7 @@ export async function uploadWallpaper(ctx: Context) {
 
     try {
       const data = part.subarray(headerEnd + 4, part.length - 2)
-      const record = saveWallpaperFile(id, filename, data)
+      const record = await saveWallpaperFile(id, filename, data)
       ctx.status = 201
       ctx.body = toPayload(record)
       return

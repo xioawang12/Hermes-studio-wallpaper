@@ -1,5 +1,5 @@
 import { getDb } from '../infrastructure/database'
-import { USER_WALLPAPERS_TABLE } from '../infrastructure/database/schemas'
+import { USER_WALLPAPERS_TABLE, USER_CAROUSEL_TABLE } from '../infrastructure/database/schemas'
 
 export interface UserWallpaperRecord {
   id: number
@@ -71,7 +71,7 @@ export function listUserWallpapers(userIdValue: unknown): UserWallpaperRecord[] 
   const userId = normalizeUserId(userIdValue)
   const rows = requireDb().prepare(
     `SELECT * FROM ${USER_WALLPAPERS_TABLE} WHERE user_id = ? ORDER BY sort_order ASC, id ASC`,
-  ).all(userId) as StoredUserWallpaperRow[]
+  ).all(userId) as unknown as StoredUserWallpaperRow[]
   return rows.map(mapRow)
 }
 
@@ -83,7 +83,7 @@ export function getWallpaperById(userIdValue: unknown, wallpaperId: unknown): Us
   }
   const row = requireDb().prepare(
     `SELECT * FROM ${USER_WALLPAPERS_TABLE} WHERE id = ? AND user_id = ?`,
-  ).get(wallpaperIdNum, userId) as StoredUserWallpaperRow | undefined
+  ).get(wallpaperIdNum, userId) as unknown as StoredUserWallpaperRow | undefined
   return row ? mapRow(row) : null
 }
 
@@ -105,7 +105,7 @@ export function addWallpaperRecord(input: {
   ).run(userId, input.filename, input.originalName, input.mime, maxOrder.m + 1, now)
   const row = db.prepare(
     `SELECT * FROM ${USER_WALLPAPERS_TABLE} WHERE id = ?`,
-  ).get(result.lastInsertRowid) as StoredUserWallpaperRow
+  ).get(result.lastInsertRowid) as unknown as StoredUserWallpaperRow
   return mapRow(row)
 }
 
@@ -132,7 +132,7 @@ export function setCurrentWallpaper(userIdValue: unknown, wallpaperId: unknown):
   }
   const row = db.prepare(
     `SELECT * FROM ${USER_WALLPAPERS_TABLE} WHERE id = ?`,
-  ).get(wallpaperIdNum) as StoredUserWallpaperRow
+  ).get(wallpaperIdNum) as unknown as StoredUserWallpaperRow
   return mapRow(row)
 }
 
@@ -154,7 +154,7 @@ export function updateWallpaperFillMode(
   if (result.changes === 0) throw new WallpaperValidationError('Wallpaper not found', 404)
   const row = db.prepare(
     `SELECT * FROM ${USER_WALLPAPERS_TABLE} WHERE id = ?`,
-  ).get(wallpaperIdNum) as StoredUserWallpaperRow
+  ).get(wallpaperIdNum) as unknown as StoredUserWallpaperRow
   return mapRow(row)
 }
 
@@ -167,7 +167,7 @@ export function deleteWallpaperRecord(userIdValue: unknown, wallpaperId: unknown
   const db = requireDb()
   const row = db.prepare(
     `SELECT * FROM ${USER_WALLPAPERS_TABLE} WHERE id = ? AND user_id = ?`,
-  ).get(wallpaperIdNum, userId) as StoredUserWallpaperRow | undefined
+  ).get(wallpaperIdNum, userId) as unknown as StoredUserWallpaperRow | undefined
   if (!row) throw new WallpaperValidationError('Wallpaper not found', 404)
   db.prepare(`DELETE FROM ${USER_WALLPAPERS_TABLE} WHERE id = ? AND user_id = ?`).run(wallpaperIdNum, userId)
   return mapRow(row)
