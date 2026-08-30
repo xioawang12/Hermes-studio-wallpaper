@@ -41,6 +41,7 @@ const {
   uploadBackground,
   removeBackground,
 } = useTheme()
+import WallpaperSection from '@/components/hermes/WallpaperSection.vue'
 
 const brightnessOptions = computed(() => [
   { label: t('theme.modeSystem'), value: 'system' },
@@ -296,6 +297,8 @@ async function handleReset() {
         </div>
         <p class="background-note">{{ t('theme.backgroundNote') }}</p>
       </section>
+
+      <WallpaperSection />
 
       <section class="theme-preview">
         <div class="preview-copy">

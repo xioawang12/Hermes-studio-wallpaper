@@ -161,11 +161,6 @@ const router = createRouter({
       component: () => import('@/views/hermes/ThemeView.vue'),
     },
     {
-      path: '/hermes/wallpapers',
-      name: 'hermes.wallpapers',
-      component: () => import('@/views/hermes/WallpaperLibraryView.vue'),
-    },
-    {
       path: '/hermes/channels',
       name: 'hermes.channels',
       component: () => import('@/views/hermes/ChannelsView.vue'),
