@@ -59,7 +59,6 @@ const carousel = ref<CarouselSettings>({
 
 const current = computed(() => wallpapers.value.find(w => w.isCurrent) ?? null)
 const carouselIds = computed(() => new Set(carousel.value.wallpaperIds))
-const hasAnyWallpaper = computed(() => wallpapers.value.length > 0)
 
 const fillOptions = [
   { label: '铺满裁切', value: 'cover' },
@@ -208,12 +207,6 @@ html.theme-has-custom-background aside.sidebar {
     document.body.appendChild(scrimEl)
   }
   scrimEl.style.background = `rgba(0,0,0,${c.scrimStrength})`
-}
-
-function removeTuning(): void {
-  document.getElementById(TUNING_STYLE_ID)?.remove()
-  scrimEl?.remove()
-  scrimEl = null
 }
 
 // ---- carousel timer ----
